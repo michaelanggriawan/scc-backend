@@ -12,7 +12,7 @@ export interface AppConfig {
     synchronize: boolean;
   };
   jwt: { secret: string; expiresIn: string };
-  email: { sendgridApiKey: string; from: string; fromName: string };
+  email: { resendApiKey: string; from: string; fromName: string };
   payments: { linkDefaultDays: number; maxRejections: number };
   uploads: { dir: string; maxMb: number };
   seed: { adminEmail: string; adminPassword: string };
@@ -36,7 +36,7 @@ export default (): AppConfig => ({
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
   email: {
-    sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+    resendApiKey: process.env.RESEND_API_KEY || '',
     from: process.env.EMAIL_FROM || 'no-reply@scc.example.com',
     fromName: process.env.EMAIL_FROM_NAME || 'SCC Venue',
   },

@@ -1,6 +1,6 @@
 # SCC 2 — Backend API
 
-Backend for the SCC venue booking app. Built with **NestJS + TypeORM + PostgreSQL + Zod + Swagger**, email via **SendGrid**.
+Backend for the SCC venue booking app. Built with **NestJS + TypeORM + PostgreSQL + Zod + Swagger**, email via **Resend**.
 
 It implements the exact business flow from the frontend wireframe (`../SCC 2/src/app/App.tsx`): customers submit an inquiry → admin negotiates and sets an agreed price → a tokenized payment link is issued → customer uploads proof of payment (via the link **or** their logged-in profile) → admin approves/rejects.
 
@@ -18,8 +18,8 @@ npm run start:dev           # http://localhost:3000/api/v1
 - **Swagger docs:** `http://localhost:3000/docs`
 - **Uploaded files:** served at `/files/*`
 
-### Email (SendGrid)
-Leave `SENDGRID_API_KEY` empty during development — every email is **logged to the console** instead of sent, so the whole flow works without the key. Set the key in `.env` to go live; no code changes needed.
+### Email (Resend)
+Leave `RESEND_API_KEY` empty during development — every email is **logged to the console** instead of sent, so the whole flow works without the key. Get a key at [resend.com](https://resend.com), set it in `.env` (and point `EMAIL_FROM` at a domain verified in Resend) to go live; no code changes needed.
 
 ### Seed admin
 `npm run seed` creates an admin from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (defaults `admin@scc.example.com` / `admin12345`). Registration only ever creates **customers** — admins are seeded.
