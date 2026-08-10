@@ -1,0 +1,55 @@
+export interface AppConfig {
+  env: string;
+  port: number;
+  publicAppUrl: string;
+  db: {
+    type: 'postgres' | 'sqljs';
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+    database: string;
+    synchronize: boolean;
+  };
+  jwt: { secret: string; expiresIn: string };
+  email: { sendgridApiKey: string; from: string; fromName: string };
+  payments: { linkDefaultDays: number; maxRejections: number };
+  uploads: { dir: string; maxMb: number };
+  seed: { adminEmail: string; adminPassword: string };
+}
+
+export default (): AppConfig => ({
+  env: process.env.NODE_ENV || 'development',
+  port: parseInt(process.env.PORT || '3000', 10),
+  publicAppUrl: process.env.PUBLIC_APP_URL || 'http://localhost:5173',
+  db: {
+    type: (process.env.DB_TYPE as 'postgres') || 'postgres',
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    username: process.env.DB_USERNAME || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+    database: process.env.DB_NAME || 'scc',
+    synchronize: process.env.DB_SYNCHRONIZE === 'true',
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET || 'change-me-in-production',
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  },
+  email: {
+    sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+    from: process.env.EMAIL_FROM || 'no-reply@scc.example.com',
+    fromName: process.env.EMAIL_FROM_NAME || 'SCC Venue',
+  },
+  payments: {
+    linkDefaultDays: parseInt(process.env.PAYMENT_LINK_DEFAULT_DAYS || '7', 10),
+    maxRejections: parseInt(process.env.MAX_PAYMENT_REJECTIONS || '3', 10),
+  },
+  uploads: {
+    dir: process.env.UPLOAD_DIR || 'uploads',
+    maxMb: parseInt(process.env.MAX_UPLOAD_MB || '5', 10),
+  },
+  seed: {
+    adminEmail: process.env.SEED_ADMIN_EMAIL || 'admin@scc.example.com',
+    adminPassword: process.env.SEED_ADMIN_PASSWORD || 'admin12345',
+  },
+});
