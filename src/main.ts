@@ -16,7 +16,7 @@ if (patchSwagger) patchSwagger();
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
-  const port = config.get<number>('port') ?? 3000;
+  const port = config.get<number>('port') ?? 4000;
 
   app.setGlobalPrefix('api/v1');
   app.enableCors({ origin: true, credentials: true });
