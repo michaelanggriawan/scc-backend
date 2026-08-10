@@ -7,13 +7,13 @@ export const CreateInquirySchema = z
   .object({
     customerName: z.string().min(1).max(120),
     customerEmail: z.string().email(),
-    customerPhone: z.string().max(40).optional().default(''),
-    roomId: z.string().uuid().nullable().optional(),
+    customerPhone: z.string().min(1).max(40),
+    roomId: z.string().uuid(),
     addonIds: z.array(z.string().uuid()).optional().default([]),
-    date: z.string().max(20).optional().default(''),
-    time: z.string().max(20).optional().default(''),
-    duration: z.string().max(40).optional().default(''),
-    category: z.string().max(120).optional().default(''),
+    date: z.string().min(1).max(20),
+    time: z.string().min(1).max(20),
+    duration: z.string().min(1).max(40),
+    category: z.string().min(1).max(120),
     notes: z.string().max(4000).optional().default(''),
   })
   .strict();
