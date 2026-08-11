@@ -13,7 +13,7 @@ export interface AppConfig {
   };
   jwt: { secret: string; expiresIn: string };
   email: { resendApiKey: string; from: string; fromName: string };
-  payments: { linkDefaultDays: number; maxRejections: number };
+  payments: { maxRejections: number };
   uploads: { dir: string; maxMb: number };
   seed: { adminEmail: string; adminPassword: string };
 }
@@ -41,7 +41,6 @@ export default (): AppConfig => ({
     fromName: process.env.EMAIL_FROM_NAME || 'SCC Venue',
   },
   payments: {
-    linkDefaultDays: parseInt(process.env.PAYMENT_LINK_DEFAULT_DAYS || '7', 10),
     maxRejections: parseInt(process.env.MAX_PAYMENT_REJECTIONS || '3', 10),
   },
   uploads: {

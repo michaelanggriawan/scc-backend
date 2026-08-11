@@ -81,7 +81,7 @@ export class Inquiry {
   agreedPrice: number | null;
 
   @Column({ type: 'varchar', nullable: true })
-  paymentDueDate: string | null; // YYYY-MM-DD
+  paymentDueDate: string | null; // ISO datetime — defaults to 24h after the payment link is generated
 
   @Column({ type: 'text', default: '' })
   adminNotes: string;
