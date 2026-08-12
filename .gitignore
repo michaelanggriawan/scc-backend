@@ -2,7 +2,8 @@ node_modules
 dist
 .env
 *.log
-uploads/
+# Runtime upload storage at the repo root only — must NOT match src/modules/uploads/
+/uploads/
 coverage/
 *.sqlite
 *.sqlite3
