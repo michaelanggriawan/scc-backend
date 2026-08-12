@@ -17,8 +17,9 @@ import {
   PAYABLE_STATUSES,
 } from '../../common/enums';
 import {
-  addDays,
+  addHours,
   buildInquiryRef,
+  formatDueDate,
   generatePaymentToken,
   isPastDue,
 } from '../../common/utils';
@@ -197,6 +198,14 @@ export class InquiriesService {
     if (dto.addonIds !== undefined) inquiry.addonIds = dto.addonIds;
     if (dto.agreedPrice !== undefined) inquiry.agreedPrice = dto.agreedPrice;
     if (dto.adminNotes !== undefined) inquiry.adminNotes = dto.adminNotes;
+    if (dto.paymentDueDate !== undefined) {
+      inquiry.paymentDueDate = dto.paymentDueDate;
+      // Keep the active payment link's real expiry in sync with the new due date.
+      await this.linkRepo.update(
+        { inquiryId: inquiry.id, isActive: true },
+        { expiresAt: new Date(dto.paymentDueDate) },
+      );
+    }
     return this.repo.save(inquiry);
   }
 
@@ -212,7 +221,9 @@ export class InquiriesService {
     if (dto.addonIds !== undefined) inquiry.addonIds = dto.addonIds;
     if (dto.adminNotes !== undefined) inquiry.adminNotes = dto.adminNotes;
     inquiry.agreedPrice = dto.agreedPrice;
-    inquiry.paymentDueDate = dto.paymentDueDate;
+    // Defaults to exactly 24h from now if the admin doesn't set one.
+    inquiry.paymentDueDate =
+      dto.paymentDueDate || addHours(new Date(), 24).toISOString();
     inquiry.status = InquiryStatus.AwaitingPayment;
     await this.repo.save(inquiry);
 
@@ -305,10 +316,9 @@ export class InquiriesService {
   // ─── Payment link helpers ────────────────────────────
   async regenerateLink(inquiry: Inquiry): Promise<PaymentLink> {
     await this.deactivateLinks(inquiry.id);
-    const defaultDays = this.config.get<number>('payments.linkDefaultDays') ?? 7;
     const expiresAt = inquiry.paymentDueDate
-      ? new Date(`${inquiry.paymentDueDate}T23:59:59`)
-      : addDays(new Date(), defaultDays);
+      ? new Date(inquiry.paymentDueDate)
+      : addHours(new Date(), 24);
     const link = this.linkRepo.create({
       token: generatePaymentToken(),
       inquiryId: inquiry.id,
@@ -359,7 +369,7 @@ export class InquiriesService {
     await this.email.send({
       to: inquiry.customerEmail,
       subject: `Complete your payment — ${inquiry.ref}`,
-      text: `Your booking ${inquiry.ref} is ready for payment.\n\nAmount: Rp ${inquiry.agreedPrice?.toLocaleString('id-ID')}\nDue by: ${inquiry.paymentDueDate}\n\nPay & upload your proof here:\n${this.linkUrl(link)}\n\nIf payment isn't received by the due date, the booking is automatically cancelled.`,
+      text: `Your booking ${inquiry.ref} is ready for payment.\n\nAmount: Rp ${inquiry.agreedPrice?.toLocaleString('id-ID')}\nDue by: ${formatDueDate(inquiry.paymentDueDate)}\n\nPay & upload your proof here:\n${this.linkUrl(link)}\n\nIf payment isn't received by the due date, the booking is automatically cancelled.`,
     });
   }
 

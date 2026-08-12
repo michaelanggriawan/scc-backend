@@ -31,6 +31,7 @@ export const UpdateTermsSchema = z
     roomId: z.string().uuid().nullable().optional(),
     addonIds: z.array(z.string().uuid()).optional(),
     agreedPrice: z.number().int().nonnegative().nullable().optional(),
+    paymentDueDate: z.string().min(1).optional(), // ISO datetime
     adminNotes: z.string().max(4000).optional(),
   })
   .strict();
@@ -40,7 +41,8 @@ export class UpdateTermsDto extends createZodDto(UpdateTermsSchema) {}
 export const MarkAwaitingPaymentSchema = z
   .object({
     agreedPrice: z.number().int().nonnegative(),
-    paymentDueDate: z.string().min(1), // YYYY-MM-DD
+    // ISO datetime; omit to default to 24h from now (when the link is generated)
+    paymentDueDate: z.string().min(1).optional(),
     roomId: z.string().uuid().nullable().optional(),
     addonIds: z.array(z.string().uuid()).optional(),
     adminNotes: z.string().max(4000).optional(),
