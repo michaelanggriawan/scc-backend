@@ -10,6 +10,7 @@ export interface AppConfig {
     password: string;
     database: string;
     synchronize: boolean;
+    migrationsRun: boolean;
   };
   jwt: { secret: string; expiresIn: string };
   email: { resendApiKey: string; from: string; fromName: string };
@@ -30,6 +31,7 @@ export default (): AppConfig => ({
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_NAME || 'scc',
     synchronize: process.env.DB_SYNCHRONIZE === 'true',
+    migrationsRun: process.env.DB_MIGRATIONS_RUN === 'true',
   },
   jwt: {
     secret: process.env.JWT_SECRET || 'change-me-in-production',

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { join } from 'path';
 import { User } from '../entities/user.entity';
 import { Room } from '../entities/room.entity';
 import { AddOn } from '../entities/addon.entity';
@@ -47,7 +48,12 @@ export const ALL_ENTITIES = [
           password: db.password,
           database: db.database,
           entities: ALL_ENTITIES,
+          // Prefer migrations over synchronize outside of tests. When
+          // DB_MIGRATIONS_RUN=true, pending migrations run automatically on
+          // boot. Keep synchronize env-driven for local dev convenience.
           synchronize: db.synchronize,
+          migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
+          migrationsRun: db.migrationsRun,
           autoLoadEntities: true,
         };
       },
