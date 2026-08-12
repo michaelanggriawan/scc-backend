@@ -13,13 +13,13 @@ export class AddOnsService {
   ) {}
 
   findAll(): Promise<AddOn[]> {
-    return this.repo.find({ order: { createdAt: 'DESC' } });
+    return this.repo.find({ order: { order: 'ASC' } });
   }
 
   findActive(): Promise<AddOn[]> {
     return this.repo.find({
       where: { status: EntityStatus.Active },
-      order: { createdAt: 'DESC' },
+      order: { order: 'ASC' },
     });
   }
 
@@ -34,8 +34,9 @@ export class AddOnsService {
     return addon;
   }
 
-  create(dto: CreateAddOnDto): Promise<AddOn> {
-    return this.repo.save(this.repo.create(dto));
+  async create(dto: CreateAddOnDto): Promise<AddOn> {
+    const count = await this.repo.count();
+    return this.repo.save(this.repo.create({ ...dto, order: count }));
   }
 
   async update(id: string, dto: UpdateAddOnDto): Promise<AddOn> {
@@ -53,5 +54,25 @@ export class AddOnsService {
   async remove(id: string): Promise<void> {
     const addon = await this.findById(id);
     await this.repo.remove(addon);
+  }
+
+  async reorder(ids: string[]): Promise<AddOn[]> {
+    const addons = await this.findByIds(ids);
+    if (addons.length !== ids.length) {
+      const foundIds = new Set(addons.map((a) => a.id));
+      const missing = ids.filter((id) => !foundIds.has(id));
+      throw new NotFoundException(
+        `Add-on(s) not found: ${missing.join(', ')}`,
+      );
+    }
+    const byId = new Map(addons.map((a) => [a.id, a]));
+    await Promise.all(
+      ids.map((id, index) => {
+        const addon = byId.get(id) as AddOn;
+        addon.order = index;
+        return this.repo.save(addon);
+      }),
+    );
+    return this.findAll();
   }
 }

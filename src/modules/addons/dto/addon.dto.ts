@@ -20,3 +20,8 @@ export const UpdateAddOnStatusSchema = z
 export class UpdateAddOnStatusDto extends createZodDto(
   UpdateAddOnStatusSchema,
 ) {}
+
+export const ReorderAddOnsSchema = z
+  .object({ ids: z.array(z.string()).min(1) })
+  .strict();
+export class ReorderAddOnsDto extends createZodDto(ReorderAddOnsSchema) {}
