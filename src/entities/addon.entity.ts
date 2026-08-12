@@ -21,6 +21,9 @@ export class AddOn {
   @Column({ type: 'varchar', default: EntityStatus.Active })
   status: EntityStatus;
 
+  @Column({ type: 'int', default: 0 })
+  order: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
