@@ -46,11 +46,11 @@ export class PublicPaymentsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody(fileBody)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  submit(
+  async submit(
     @Param('token') token: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const stored = this.uploads.save(file);
+    const stored = await this.uploads.save(file);
     return this.payments.submitProofByToken(token, stored);
   }
 }
@@ -74,12 +74,12 @@ export class CustomerPaymentsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody(fileBody)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  submit(
+  async submit(
     @CurrentUser('userId') userId: string,
     @Param('ref') ref: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const stored = this.uploads.save(file);
+    const stored = await this.uploads.save(file);
     return this.payments.submitProofByRef(ref, userId, stored);
   }
 }

@@ -1,12 +1,11 @@
 import 'reflect-metadata';
+import { RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as nestjsZod from 'nestjs-zod';
-import { join } from 'path';
 import { AppModule } from './app.module';
-import { UploadsService } from './modules/uploads/uploads.service';
 
 // Make Swagger understand Zod DTOs (function name has varied across versions).
 const patchSwagger =
@@ -18,14 +17,12 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const port = config.get<number>('port') ?? 4000;
 
-  app.setGlobalPrefix('api/v1');
-  app.enableCors({ origin: true, credentials: true });
-
-  // Serve uploaded files (payment proofs, QR, room photos) at /files/*
-  const uploads = app.get(UploadsService);
-  app.useStaticAssets(join(process.cwd(), uploads.uploadDir), {
-    prefix: '/files/',
+  // Keep uploaded-file URLs at the root (/files/:key) instead of under the API
+  // prefix — FilesController streams them from S3 or disk.
+  app.setGlobalPrefix('api/v1', {
+    exclude: [{ path: 'files/:key', method: RequestMethod.GET }],
   });
+  app.enableCors({ origin: true, credentials: true });
 
   // ─── Swagger / OpenAPI ───────────────────────────────
   const swaggerConfig = new DocumentBuilder()

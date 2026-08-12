@@ -16,6 +16,13 @@ export interface AppConfig {
   email: { resendApiKey: string; from: string; fromName: string };
   payments: { maxRejections: number };
   uploads: { dir: string; maxMb: number };
+  s3: {
+    endpoint: string;
+    region: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+  };
   seed: { adminEmail: string; adminPassword: string };
 }
 
@@ -48,6 +55,13 @@ export default (): AppConfig => ({
   uploads: {
     dir: process.env.UPLOAD_DIR || 'uploads',
     maxMb: parseInt(process.env.MAX_UPLOAD_MB || '5', 10),
+  },
+  s3: {
+    endpoint: process.env.S3_ENDPOINT || '',
+    region: process.env.S3_REGION || 'auto',
+    bucket: process.env.S3_BUCKET || '',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
   },
   seed: {
     adminEmail: process.env.SEED_ADMIN_EMAIL || 'admin@scc.example.com',
