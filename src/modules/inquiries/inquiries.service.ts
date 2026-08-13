@@ -5,11 +5,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { Inquiry } from '../../entities/inquiry.entity';
 import { PaymentLink } from '../../entities/payment-link.entity';
 import { PaymentProof } from '../../entities/payment-proof.entity';
 import {
+  AVAILABILITY_BLOCKING_STATUSES,
   CancelledBy,
   CUSTOMER_CANCELLABLE_STATUSES,
   EDITABLE_INQUIRY_STATUSES,
@@ -22,6 +23,9 @@ import {
   formatDueDate,
   generatePaymentToken,
   isPastDue,
+  minutesToTime,
+  parseDurationHours,
+  parseTimeToMinutes,
 } from '../../common/utils';
 import { RoomsService } from '../rooms/rooms.service';
 import { AddOnsService } from '../addons/addons.service';
@@ -85,6 +89,54 @@ export class InquiriesService {
     return { ...inquiry, room, addons, proofs };
   }
 
+  // ─── Public: room availability for a date (booked ranges) ──
+  async getAvailability(roomId: string, date: string) {
+    await this.rooms.findById(roomId); // 404s if missing
+    const inquiries = await this.repo.find({
+      where: { roomId, date, status: In(AVAILABILITY_BLOCKING_STATUSES) },
+    });
+    const bookedRanges = inquiries
+      .map((inq) => {
+        const start = parseTimeToMinutes(inq.time);
+        const hours = parseDurationHours(inq.duration);
+        if (start == null || hours <= 0) return null;
+        return { start: inq.time, end: minutesToTime(start + hours * 60) };
+      })
+      .filter((r): r is { start: string; end: string } => r !== null);
+    return { roomId, date, bookedRanges };
+  }
+
+  // Rejects a create() if the requested room/date/time/duration overlaps an
+  // existing booking that's still holding its slot (see
+  // AVAILABILITY_BLOCKING_STATUSES). Malformed time/duration is left for the
+  // DTO/UI to catch elsewhere — this only ever blocks a genuine overlap.
+  private async assertNoOverlap(
+    roomId: string,
+    date: string,
+    time: string,
+    duration: string,
+  ) {
+    const start = parseTimeToMinutes(time);
+    const hours = parseDurationHours(duration);
+    if (start == null || hours <= 0) return;
+    const end = start + hours * 60;
+
+    const existing = await this.repo.find({
+      where: { roomId, date, status: In(AVAILABILITY_BLOCKING_STATUSES) },
+    });
+    for (const inq of existing) {
+      const exStart = parseTimeToMinutes(inq.time);
+      const exHours = parseDurationHours(inq.duration);
+      if (exStart == null || exHours <= 0) continue;
+      const exEnd = exStart + exHours * 60;
+      if (start < exEnd && exStart < end) {
+        throw new BadRequestException(
+          `This room is already booked on ${date} from ${inq.time} to ${minutesToTime(exEnd)}. Please choose a different time.`,
+        );
+      }
+    }
+  }
+
   // ─── Customer: create ────────────────────────────────
   async create(
     dto: CreateInquiryDto,
@@ -95,6 +147,7 @@ export class InquiriesService {
       if (room.status !== 'Active') {
         throw new BadRequestException('Selected room is not available');
       }
+      await this.assertNoOverlap(dto.roomId, dto.date, dto.time, dto.duration);
     }
     const ref = await this.nextRef();
     const inquiry = this.repo.create({

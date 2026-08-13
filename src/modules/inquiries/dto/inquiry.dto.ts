@@ -58,6 +58,17 @@ export const RejectPaymentSchema = z
   .strict();
 export class RejectPaymentDto extends createZodDto(RejectPaymentSchema) {}
 
+// ─── Public: check room availability for a date ────────
+export const AvailabilityQuerySchema = z
+  .object({
+    roomId: z.string().uuid(),
+    date: z.string().min(1).max(20),
+  })
+  .strict();
+export class AvailabilityQueryDto extends createZodDto(
+  AvailabilityQuerySchema,
+) {}
+
 // ─── Admin: list filters ───────────────────────────────
 export const ListInquiriesSchema = z
   .object({
