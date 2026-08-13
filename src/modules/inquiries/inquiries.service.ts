@@ -82,7 +82,18 @@ export class InquiriesService {
       where: { inquiryId: inquiry.id },
       order: { submittedAt: 'DESC' },
     });
-    return { ...inquiry, room, addons, proofs };
+    const activeLink = await this.linkRepo.findOne({
+      where: { inquiryId: inquiry.id, isActive: true },
+      order: { createdAt: 'DESC' },
+    });
+    const paymentLink = activeLink
+      ? {
+          url: this.linkUrl(activeLink),
+          expiresAt: activeLink.expiresAt,
+          expired: isPastDue(activeLink.expiresAt),
+        }
+      : null;
+    return { ...inquiry, room, addons, proofs, paymentLink };
   }
 
   // ─── Customer: create ────────────────────────────────
