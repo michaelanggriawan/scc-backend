@@ -74,13 +74,22 @@ export class InquiriesService {
   }
 
   // ─── Reference generation ────────────────────────────
+  // Continues from the highest existing sequence number rather than
+  // COUNT(*) — a count breaks as soon as any row for the year is deleted
+  // (e.g. cleaning up bad test data), since it then reissues a ref that's
+  // still in use and collides with the table's unique constraint.
   private async nextRef(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.repo
+    const prefix = `SCC-${year}-`;
+    const last = await this.repo
       .createQueryBuilder('i')
-      .where('i.ref LIKE :prefix', { prefix: `SCC-${year}-%` })
-      .getCount();
-    return buildInquiryRef(year, count + 1);
+      .select('i.ref', 'ref')
+      .where('i.ref LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('i.ref', 'DESC')
+      .limit(1)
+      .getRawOne<{ ref: string }>();
+    const lastSeq = last ? parseInt(last.ref.slice(prefix.length), 10) : 0;
+    return buildInquiryRef(year, (Number.isFinite(lastSeq) ? lastSeq : 0) + 1);
   }
 
   // ─── Enrichment (resolve room + add-ons for detail views) ──
