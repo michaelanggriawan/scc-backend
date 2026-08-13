@@ -11,6 +11,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { InquiriesService } from './inquiries.service';
 import {
   AvailabilityQueryDto,
+  AvailabilitySummaryQueryDto,
   CancelInquiryDto,
   CreateInquiryDto,
   ListInquiriesDto,
@@ -39,6 +40,16 @@ export class PublicInquiriesController {
   @Get('inquiries/availability')
   availability(@Query() query: AvailabilityQueryDto) {
     return this.inquiries.getAvailability(query.roomId, query.date);
+  }
+
+  @Public()
+  @Get('inquiries/availability-summary')
+  availabilitySummary(@Query() query: AvailabilitySummaryQueryDto) {
+    return this.inquiries.getAvailabilitySummary(
+      query.roomId,
+      query.from,
+      query.to,
+    );
   }
 
   @Public()

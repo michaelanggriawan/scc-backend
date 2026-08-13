@@ -69,6 +69,19 @@ export class AvailabilityQueryDto extends createZodDto(
   AvailabilityQuerySchema,
 ) {}
 
+// ─── Public: per-date availability summary over a range (for graying out
+// fully-booked days on a calendar without a round trip per date) ──
+export const AvailabilitySummaryQuerySchema = z
+  .object({
+    roomId: z.string().uuid(),
+    from: z.string().min(1).max(20),
+    to: z.string().min(1).max(20),
+  })
+  .strict();
+export class AvailabilitySummaryQueryDto extends createZodDto(
+  AvailabilitySummaryQuerySchema,
+) {}
+
 // ─── Admin: list filters ───────────────────────────────
 export const ListInquiriesSchema = z
   .object({

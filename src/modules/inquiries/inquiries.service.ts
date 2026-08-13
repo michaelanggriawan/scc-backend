@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Repository } from 'typeorm';
+import { Between, Brackets, In, Repository } from 'typeorm';
 import { Inquiry } from '../../entities/inquiry.entity';
 import { PaymentLink } from '../../entities/payment-link.entity';
 import { PaymentProof } from '../../entities/payment-proof.entity';
@@ -22,11 +22,18 @@ import {
   buildInquiryRef,
   formatDueDate,
   generatePaymentToken,
+  hasFreeWindow,
   isPastDue,
   minutesToTime,
   parseDurationHours,
   parseTimeToMinutes,
 } from '../../common/utils';
+
+// Operating window used to judge whether a day still has room for a fresh
+// booking ("partial") or is booked solid ("full") — mirrors the frontend's
+// selectable slot range.
+const DAY_START_MIN = 7 * 60; // 07:00
+const DAY_END_MIN = 24 * 60; // midnight
 import { RoomsService } from '../rooms/rooms.service';
 import { AddOnsService } from '../addons/addons.service';
 import { SettingsService } from '../settings/settings.service';
@@ -104,6 +111,37 @@ export class InquiriesService {
       })
       .filter((r): r is { start: string; end: string } => r !== null);
     return { roomId, date, bookedRanges };
+  }
+
+  // ─── Public: per-date "full"/"partial" summary across a range ──
+  // Lets the calendar gray out fully-booked days and flag partially-booked
+  // ones without a round trip per date. Dates with no bookings at all are
+  // omitted (the frontend treats "absent" as fully free).
+  async getAvailabilitySummary(roomId: string, from: string, to: string) {
+    await this.rooms.findById(roomId); // 404s if missing
+    const inquiries = await this.repo.find({
+      where: {
+        roomId,
+        date: Between(from, to),
+        status: In(AVAILABILITY_BLOCKING_STATUSES),
+      },
+    });
+    const byDate = new Map<string, { start: number; end: number }[]>();
+    for (const inq of inquiries) {
+      const start = parseTimeToMinutes(inq.time);
+      const hours = parseDurationHours(inq.duration);
+      if (start == null || hours <= 0) continue;
+      const ranges = byDate.get(inq.date) ?? [];
+      ranges.push({ start, end: start + hours * 60 });
+      byDate.set(inq.date, ranges);
+    }
+    const dates: Record<string, 'full' | 'partial'> = {};
+    for (const [date, ranges] of byDate) {
+      dates[date] = hasFreeWindow(ranges, DAY_START_MIN, DAY_END_MIN, 60)
+        ? 'partial'
+        : 'full';
+    }
+    return { roomId, from, to, dates };
   }
 
   // Rejects a create() if the requested room/date/time/duration overlaps an

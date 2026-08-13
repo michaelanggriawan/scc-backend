@@ -55,6 +55,29 @@ export function minutesToTime(totalMinutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+// True if there's at least one free window of `minWindowMinutes` somewhere
+// in [dayStart, dayEnd) once `ranges` are accounted for. Used to decide
+// whether a day still has room for a fresh hour-long booking ("partial")
+// or is booked solid ("full"). Handles overlapping/adjacent ranges via a
+// start-sorted sweep — no separate merge step needed.
+export function hasFreeWindow(
+  ranges: { start: number; end: number }[],
+  dayStart: number,
+  dayEnd: number,
+  minWindowMinutes: number,
+): boolean {
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  let cursor = dayStart;
+  for (const r of sorted) {
+    const s = Math.max(r.start, dayStart);
+    const e = Math.min(r.end, dayEnd);
+    if (s > cursor && s - cursor >= minWindowMinutes) return true;
+    cursor = Math.max(cursor, e);
+    if (cursor >= dayEnd) return false;
+  }
+  return dayEnd - cursor >= minWindowMinutes;
+}
+
 // Human-readable due date/time for customer-facing emails, e.g. "12 Aug 2026, 14:30".
 export function formatDueDate(dueDate: string | Date | null | undefined): string {
   if (!dueDate) return '—';
