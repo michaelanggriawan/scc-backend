@@ -3,6 +3,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '../../common/enums';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -23,5 +25,19 @@ export class UsersController {
   ) {
     const user = await this.users.updateProfile(userId, dto);
     return this.users.toPublic(user);
+  }
+}
+
+// ─── Admin: view-only users list ───────────────────────
+@ApiTags('Users (Admin)')
+@ApiBearerAuth()
+@Roles(UserRole.Admin)
+@Controller('admin/users')
+export class AdminUsersController {
+  constructor(private readonly users: UsersService) {}
+
+  @Get()
+  list() {
+    return this.users.findAll();
   }
 }
