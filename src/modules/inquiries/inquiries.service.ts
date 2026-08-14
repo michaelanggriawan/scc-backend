@@ -74,6 +74,27 @@ export class InquiriesService {
   }
 
   // ─── Reference generation ────────────────────────────
+  // Based on the highest existing sequence number, not the row count — a
+  // count-based approach collides as soon as the refs for the year have any
+  // gap (e.g. from a deleted row), since count+1 can land on a number that's
+  // already taken.
+  private async nextRef(): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `SCC-${year}-`;
+    // The offset must be cast explicitly — an untyped parameter in
+    // SUBSTRING(text FROM $1) makes Postgres resolve the regex-pattern
+    // overload instead of the integer-position one, silently returning the
+    // wrong value instead of erroring.
+    const row = await this.repo
+      .createQueryBuilder('i')
+      .select(
+        'MAX(CAST(SUBSTRING(i.ref FROM CAST(:offset AS INTEGER)) AS INTEGER))',
+        'max',
+      )
+      .where('i.ref LIKE :like', { like: `${prefix}%` })
+      .setParameter('offset', prefix.length + 1)
+      .getRawOne<{ max: number | string | null }>();
+    return buildInquiryRef(year, Number(row?.max ?? 0) + 1);
   // Continues from the highest existing sequence number rather than
   // COUNT(*) — a count breaks as soon as any row for the year is deleted
   // (e.g. cleaning up bad test data), since it then reissues a ref that's
@@ -102,7 +123,18 @@ export class InquiriesService {
       where: { inquiryId: inquiry.id },
       order: { submittedAt: 'DESC' },
     });
-    return { ...inquiry, room, addons, proofs };
+    const activeLink = await this.linkRepo.findOne({
+      where: { inquiryId: inquiry.id, isActive: true },
+      order: { createdAt: 'DESC' },
+    });
+    const paymentLink = activeLink
+      ? {
+          url: this.linkUrl(activeLink),
+          expiresAt: activeLink.expiresAt,
+          expired: isPastDue(activeLink.expiresAt),
+        }
+      : null;
+    return { ...inquiry, room, addons, proofs, paymentLink };
   }
 
   // ─── Public: room availability for a date (booked ranges) ──

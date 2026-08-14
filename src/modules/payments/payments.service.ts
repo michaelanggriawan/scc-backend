@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -54,21 +55,33 @@ export class PaymentsService {
     };
   }
 
-  async getByToken(token: string) {
+  // A booking with no linked account (a guest inquiry) has nothing to check
+  // ownership against, so any logged-in user may proceed.
+  private assertOwnsInquiry(inquiry: Inquiry, userId: string): void {
+    if (inquiry.customerId && inquiry.customerId !== userId) {
+      throw new ForbiddenException(
+        'This payment link belongs to a different account.',
+      );
+    }
+  }
+
+  async getByToken(token: string, userId: string) {
     const link = await this.resolveActiveLink(token);
     const inquiry = await this.inquiryRepo.findOne({
       where: { id: link.inquiryId },
     });
     if (!inquiry) throw new NotFoundException('Booking not found');
+    this.assertOwnsInquiry(inquiry, userId);
     return this.payViewForInquiry(inquiry);
   }
 
-  async submitProofByToken(token: string, file: UploadedProof) {
+  async submitProofByToken(token: string, userId: string, file: UploadedProof) {
     const link = await this.resolveActiveLink(token);
     const inquiry = await this.inquiryRepo.findOne({
       where: { id: link.inquiryId },
     });
     if (!inquiry) throw new NotFoundException('Booking not found');
+    this.assertOwnsInquiry(inquiry, userId);
     const updated = await this.inquiries.submitProof(inquiry, file);
     return this.payViewForInquiry(updated);
   }

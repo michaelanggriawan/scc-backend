@@ -16,7 +16,6 @@ import {
 } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { UploadsService } from '../uploads/uploads.service';
-import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 const fileBody = {
@@ -26,8 +25,11 @@ const fileBody = {
   },
 };
 
-// ─── Public: tokenized pay page (no login required) ────
+// ─── Tokenized pay page — login required, must be the inquiry's own
+// customer. The token alone isn't treated as sufficient authorization since
+// links can end up forwarded/leaked; the account check is the real gate.
 @ApiTags('Payments (Public link)')
+@ApiBearerAuth()
 @Controller('pay')
 export class PublicPaymentsController {
   constructor(
@@ -35,23 +37,22 @@ export class PublicPaymentsController {
     private readonly uploads: UploadsService,
   ) {}
 
-  @Public()
   @Get(':token')
-  view(@Param('token') token: string) {
-    return this.payments.getByToken(token);
+  view(@CurrentUser('userId') userId: string, @Param('token') token: string) {
+    return this.payments.getByToken(token, userId);
   }
 
-  @Public()
   @Post(':token/proof')
   @ApiConsumes('multipart/form-data')
   @ApiBody(fileBody)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   async submit(
+    @CurrentUser('userId') userId: string,
     @Param('token') token: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     const stored = await this.uploads.save(file);
-    return this.payments.submitProofByToken(token, stored);
+    return this.payments.submitProofByToken(token, userId, stored);
   }
 }
 
