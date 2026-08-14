@@ -5,11 +5,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Between, Brackets, In, Repository } from 'typeorm';
 import { Inquiry } from '../../entities/inquiry.entity';
 import { PaymentLink } from '../../entities/payment-link.entity';
 import { PaymentProof } from '../../entities/payment-proof.entity';
 import {
+  AVAILABILITY_BLOCKING_STATUSES,
   CancelledBy,
   CUSTOMER_CANCELLABLE_STATUSES,
   EDITABLE_INQUIRY_STATUSES,
@@ -21,8 +22,18 @@ import {
   buildInquiryRef,
   formatDueDate,
   generatePaymentToken,
+  hasFreeWindow,
   isPastDue,
+  minutesToTime,
+  parseDurationHours,
+  parseTimeToMinutes,
 } from '../../common/utils';
+
+// Operating window used to judge whether a day still has room for a fresh
+// booking ("partial") or is booked solid ("full") — mirrors the frontend's
+// selectable slot range.
+const DAY_START_MIN = 7 * 60; // 07:00
+const DAY_END_MIN = 24 * 60; // midnight
 import { RoomsService } from '../rooms/rooms.service';
 import { AddOnsService } from '../addons/addons.service';
 import { SettingsService } from '../settings/settings.service';
@@ -63,13 +74,22 @@ export class InquiriesService {
   }
 
   // ─── Reference generation ────────────────────────────
+  // Continues from the highest existing sequence number rather than
+  // COUNT(*) — a count breaks as soon as any row for the year is deleted
+  // (e.g. cleaning up bad test data), since it then reissues a ref that's
+  // still in use and collides with the table's unique constraint.
   private async nextRef(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.repo
+    const prefix = `SCC-${year}-`;
+    const last = await this.repo
       .createQueryBuilder('i')
-      .where('i.ref LIKE :prefix', { prefix: `SCC-${year}-%` })
-      .getCount();
-    return buildInquiryRef(year, count + 1);
+      .select('i.ref', 'ref')
+      .where('i.ref LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('i.ref', 'DESC')
+      .limit(1)
+      .getRawOne<{ ref: string }>();
+    const lastSeq = last ? parseInt(last.ref.slice(prefix.length), 10) : 0;
+    return buildInquiryRef(year, (Number.isFinite(lastSeq) ? lastSeq : 0) + 1);
   }
 
   // ─── Enrichment (resolve room + add-ons for detail views) ──
@@ -85,6 +105,85 @@ export class InquiriesService {
     return { ...inquiry, room, addons, proofs };
   }
 
+  // ─── Public: room availability for a date (booked ranges) ──
+  async getAvailability(roomId: string, date: string) {
+    await this.rooms.findById(roomId); // 404s if missing
+    const inquiries = await this.repo.find({
+      where: { roomId, date, status: In(AVAILABILITY_BLOCKING_STATUSES) },
+    });
+    const bookedRanges = inquiries
+      .map((inq) => {
+        const start = parseTimeToMinutes(inq.time);
+        const hours = parseDurationHours(inq.duration);
+        if (start == null || hours <= 0) return null;
+        return { start: inq.time, end: minutesToTime(start + hours * 60) };
+      })
+      .filter((r): r is { start: string; end: string } => r !== null);
+    return { roomId, date, bookedRanges };
+  }
+
+  // ─── Public: per-date "full"/"partial" summary across a range ──
+  // Lets the calendar gray out fully-booked days and flag partially-booked
+  // ones without a round trip per date. Dates with no bookings at all are
+  // omitted (the frontend treats "absent" as fully free).
+  async getAvailabilitySummary(roomId: string, from: string, to: string) {
+    await this.rooms.findById(roomId); // 404s if missing
+    const inquiries = await this.repo.find({
+      where: {
+        roomId,
+        date: Between(from, to),
+        status: In(AVAILABILITY_BLOCKING_STATUSES),
+      },
+    });
+    const byDate = new Map<string, { start: number; end: number }[]>();
+    for (const inq of inquiries) {
+      const start = parseTimeToMinutes(inq.time);
+      const hours = parseDurationHours(inq.duration);
+      if (start == null || hours <= 0) continue;
+      const ranges = byDate.get(inq.date) ?? [];
+      ranges.push({ start, end: start + hours * 60 });
+      byDate.set(inq.date, ranges);
+    }
+    const dates: Record<string, 'full' | 'partial'> = {};
+    for (const [date, ranges] of byDate) {
+      dates[date] = hasFreeWindow(ranges, DAY_START_MIN, DAY_END_MIN, 60)
+        ? 'partial'
+        : 'full';
+    }
+    return { roomId, from, to, dates };
+  }
+
+  // Rejects a create() if the requested room/date/time/duration overlaps an
+  // existing booking that's still holding its slot (see
+  // AVAILABILITY_BLOCKING_STATUSES). Malformed time/duration is left for the
+  // DTO/UI to catch elsewhere — this only ever blocks a genuine overlap.
+  private async assertNoOverlap(
+    roomId: string,
+    date: string,
+    time: string,
+    duration: string,
+  ) {
+    const start = parseTimeToMinutes(time);
+    const hours = parseDurationHours(duration);
+    if (start == null || hours <= 0) return;
+    const end = start + hours * 60;
+
+    const existing = await this.repo.find({
+      where: { roomId, date, status: In(AVAILABILITY_BLOCKING_STATUSES) },
+    });
+    for (const inq of existing) {
+      const exStart = parseTimeToMinutes(inq.time);
+      const exHours = parseDurationHours(inq.duration);
+      if (exStart == null || exHours <= 0) continue;
+      const exEnd = exStart + exHours * 60;
+      if (start < exEnd && exStart < end) {
+        throw new BadRequestException(
+          `This room is already booked on ${date} from ${inq.time} to ${minutesToTime(exEnd)}. Please choose a different time.`,
+        );
+      }
+    }
+  }
+
   // ─── Customer: create ────────────────────────────────
   async create(
     dto: CreateInquiryDto,
@@ -95,6 +194,7 @@ export class InquiriesService {
       if (room.status !== 'Active') {
         throw new BadRequestException('Selected room is not available');
       }
+      await this.assertNoOverlap(dto.roomId, dto.date, dto.time, dto.duration);
     }
     const ref = await this.nextRef();
     const inquiry = this.repo.create({

@@ -48,6 +48,15 @@ export const PAYABLE_STATUSES: InquiryStatus[] = [
   InquiryStatus.PaymentRejected,
 ];
 
+// Statuses that hold a room's schedule slot (block overlapping bookings).
+// Cancelled and PaymentRejected free the slot back up.
+export const AVAILABILITY_BLOCKING_STATUSES: InquiryStatus[] = [
+  InquiryStatus.NewInquiry,
+  InquiryStatus.AwaitingPayment,
+  InquiryStatus.PaymentSubmitted,
+  InquiryStatus.Confirmed,
+];
+
 export const EVENT_CATEGORIES = [
   'Corporate Conference / Seminar',
   'Exhibition & Trade Show',

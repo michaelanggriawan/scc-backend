@@ -10,9 +10,13 @@ export const CreateInquirySchema = z
     customerPhone: z.string().min(1).max(40),
     roomId: z.string().uuid(),
     addonIds: z.array(z.string().uuid()).optional().default([]),
-    date: z.string().min(1).max(20),
-    time: z.string().min(1).max(20),
-    duration: z.string().min(1).max(40),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format'),
+    time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):00$/, 'time must be on the hour, e.g. "14:00"'),
+    duration: z
+      .string()
+      .regex(/^[1-9]\d*$/, 'duration must be a whole number of hours (at least 1)'),
     category: z.string().min(1).max(120),
     notes: z.string().max(4000).optional().default(''),
   })
@@ -57,6 +61,30 @@ export const RejectPaymentSchema = z
   .object({ reason: z.string().min(1).max(1000) })
   .strict();
 export class RejectPaymentDto extends createZodDto(RejectPaymentSchema) {}
+
+// ─── Public: check room availability for a date ────────
+export const AvailabilityQuerySchema = z
+  .object({
+    roomId: z.string().uuid(),
+    date: z.string().min(1).max(20),
+  })
+  .strict();
+export class AvailabilityQueryDto extends createZodDto(
+  AvailabilityQuerySchema,
+) {}
+
+// ─── Public: per-date availability summary over a range (for graying out
+// fully-booked days on a calendar without a round trip per date) ──
+export const AvailabilitySummaryQuerySchema = z
+  .object({
+    roomId: z.string().uuid(),
+    from: z.string().min(1).max(20),
+    to: z.string().min(1).max(20),
+  })
+  .strict();
+export class AvailabilitySummaryQueryDto extends createZodDto(
+  AvailabilitySummaryQuerySchema,
+) {}
 
 // ─── Admin: list filters ───────────────────────────────
 export const ListInquiriesSchema = z
