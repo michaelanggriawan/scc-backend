@@ -30,6 +30,54 @@ export function addHours(date: Date, hours: number): Date {
   return d;
 }
 
+// "HH:MM" -> minutes since midnight, or null if malformed.
+export function parseTimeToMinutes(time: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!m) return null;
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+// Leading integer of a duration string ("8" or legacy "8 hours" both -> 8).
+export function parseDurationHours(duration: string): number {
+  const n = parseInt(duration, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+// minutes since midnight -> "HH:MM". Not wrapped at 24h — a booking that
+// runs past midnight (e.g. start 22:00 + 5h) prints "27:00" rather than
+// silently rolling over to an early-morning time on the same date.
+export function minutesToTime(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// True if there's at least one free window of `minWindowMinutes` somewhere
+// in [dayStart, dayEnd) once `ranges` are accounted for. Used to decide
+// whether a day still has room for a fresh hour-long booking ("partial")
+// or is booked solid ("full"). Handles overlapping/adjacent ranges via a
+// start-sorted sweep — no separate merge step needed.
+export function hasFreeWindow(
+  ranges: { start: number; end: number }[],
+  dayStart: number,
+  dayEnd: number,
+  minWindowMinutes: number,
+): boolean {
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  let cursor = dayStart;
+  for (const r of sorted) {
+    const s = Math.max(r.start, dayStart);
+    const e = Math.min(r.end, dayEnd);
+    if (s > cursor && s - cursor >= minWindowMinutes) return true;
+    cursor = Math.max(cursor, e);
+    if (cursor >= dayEnd) return false;
+  }
+  return dayEnd - cursor >= minWindowMinutes;
+}
+
 // Human-readable due date/time for customer-facing emails, e.g. "12 Aug 2026, 14:30".
 export function formatDueDate(dueDate: string | Date | null | undefined): string {
   if (!dueDate) return '—';

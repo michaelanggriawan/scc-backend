@@ -11,6 +11,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AddOnsService } from './addons.service';
 import {
   CreateAddOnDto,
+  ReorderAddOnsDto,
   UpdateAddOnDto,
   UpdateAddOnStatusDto,
 } from './dto/addon.dto';
@@ -33,6 +34,11 @@ export class AdminAddOnsController {
   @Post()
   create(@Body() dto: CreateAddOnDto) {
     return this.addons.create(dto);
+  }
+
+  @Patch('reorder')
+  reorder(@Body() dto: ReorderAddOnsDto) {
+    return this.addons.reorder(dto.ids);
   }
 
   @Patch(':id')

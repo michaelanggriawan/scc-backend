@@ -35,6 +35,11 @@ export class UsersService {
     return user;
   }
 
+  async findAll(): Promise<Omit<User, 'passwordHash' | 'resetToken' | 'resetTokenExpiresAt'>[]> {
+    const users = await this.repo.find({ order: { createdAt: 'DESC' } });
+    return users.map((user) => this.toPublic(user));
+  }
+
   async create(input: CreateUserInput): Promise<User> {
     const email = input.email.toLowerCase();
     const existing = await this.findByEmail(email);
