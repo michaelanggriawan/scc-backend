@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -21,7 +22,10 @@ import {
 } from './dto/inquiry.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {
+  AuthUser,
+  CurrentUser,
+} from '../../common/decorators/current-user.decorator';
 import { EVENT_CATEGORIES, UserRole } from '../../common/enums';
 
 // ─── Public: guests submit inquiries, list categories ──
@@ -67,11 +71,11 @@ export class CustomerInquiriesController {
   constructor(private readonly inquiries: InquiriesService) {}
 
   @Post()
-  create(
-    @CurrentUser('userId') userId: string,
-    @Body() dto: CreateInquiryDto,
-  ) {
-    return this.inquiries.create(dto, userId);
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateInquiryDto) {
+    if (user.role === UserRole.Admin) {
+      throw new ForbiddenException('Admins cannot submit bookings');
+    }
+    return this.inquiries.create(dto, user.userId);
   }
 
   @Get('mine')
@@ -105,6 +109,11 @@ export class AdminInquiriesController {
   @Get()
   list(@Query() query: ListInquiriesDto) {
     return this.inquiries.adminList(query);
+  }
+
+  @Post()
+  create(@Body() dto: CreateInquiryDto) {
+    return this.inquiries.create(dto);
   }
 
   @Get(':ref')
