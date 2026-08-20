@@ -20,6 +20,7 @@ import {
 import {
   addHours,
   buildInquiryRef,
+  daysBetweenDateStrs,
   formatDueDate,
   generatePaymentToken,
   hasFreeWindow,
@@ -27,12 +28,13 @@ import {
   minutesToTime,
   parseDurationHours,
   parseTimeToMinutes,
+  shiftDateStr,
 } from '../../common/utils';
 
 // Operating window used to judge whether a day still has room for a fresh
 // booking ("partial") or is booked solid ("full") — mirrors the frontend's
-// selectable slot range.
-const DAY_START_MIN = 7 * 60; // 07:00
+// selectable slot range (the full day: any hour is fresh-bookable).
+const DAY_START_MIN = 0; // 00:00
 const DAY_END_MIN = 24 * 60; // midnight
 import { RoomsService } from '../rooms/rooms.service';
 import { AddOnsService } from '../addons/addons.service';
@@ -95,22 +97,6 @@ export class InquiriesService {
       .setParameter('offset', prefix.length + 1)
       .getRawOne<{ max: number | string | null }>();
     return buildInquiryRef(year, Number(row?.max ?? 0) + 1);
-  // Continues from the highest existing sequence number rather than
-  // COUNT(*) — a count breaks as soon as any row for the year is deleted
-  // (e.g. cleaning up bad test data), since it then reissues a ref that's
-  // still in use and collides with the table's unique constraint.
-  private async nextRef(): Promise<string> {
-    const year = new Date().getFullYear();
-    const prefix = `SCC-${year}-`;
-    const last = await this.repo
-      .createQueryBuilder('i')
-      .select('i.ref', 'ref')
-      .where('i.ref LIKE :prefix', { prefix: `${prefix}%` })
-      .orderBy('i.ref', 'DESC')
-      .limit(1)
-      .getRawOne<{ ref: string }>();
-    const lastSeq = last ? parseInt(last.ref.slice(prefix.length), 10) : 0;
-    return buildInquiryRef(year, (Number.isFinite(lastSeq) ? lastSeq : 0) + 1);
   }
 
   // ─── Enrichment (resolve room + add-ons for detail views) ──
@@ -140,9 +126,15 @@ export class InquiriesService {
   // ─── Public: room availability for a date (booked ranges) ──
   async getAvailability(roomId: string, date: string) {
     await this.rooms.findById(roomId); // 404s if missing
-    const inquiries = await this.repo.find({
-      where: { roomId, date, status: In(AVAILABILITY_BLOCKING_STATUSES) },
-    });
+    const prevDate = shiftDateStr(date, -1);
+    const [inquiries, prevInquiries] = await Promise.all([
+      this.repo.find({
+        where: { roomId, date, status: In(AVAILABILITY_BLOCKING_STATUSES) },
+      }),
+      this.repo.find({
+        where: { roomId, date: prevDate, status: In(AVAILABILITY_BLOCKING_STATUSES) },
+      }),
+    ]);
     const bookedRanges = inquiries
       .map((inq) => {
         const start = parseTimeToMinutes(inq.time);
@@ -151,6 +143,17 @@ export class InquiriesService {
         return { start: inq.time, end: minutesToTime(start + hours * 60) };
       })
       .filter((r): r is { start: string; end: string } => r !== null);
+    // A booking from the day before that runs past midnight (e.g. 21:00 +4h)
+    // still blocks the start of this day too.
+    for (const inq of prevInquiries) {
+      const start = parseTimeToMinutes(inq.time);
+      const hours = parseDurationHours(inq.duration);
+      if (start == null || hours <= 0) continue;
+      const spillover = start + hours * 60 - DAY_END_MIN;
+      if (spillover > 0) {
+        bookedRanges.push({ start: '00:00', end: minutesToTime(spillover) });
+      }
+    }
     return { roomId, date, bookedRanges };
   }
 
@@ -160,24 +163,35 @@ export class InquiriesService {
   // omitted (the frontend treats "absent" as fully free).
   async getAvailabilitySummary(roomId: string, from: string, to: string) {
     await this.rooms.findById(roomId); // 404s if missing
+    // Also fetch the day right before `from` — a booking that starts there
+    // and runs past midnight still eats into `from`'s own free window.
+    const queryFrom = shiftDateStr(from, -1);
     const inquiries = await this.repo.find({
       where: {
         roomId,
-        date: Between(from, to),
+        date: Between(queryFrom, to),
         status: In(AVAILABILITY_BLOCKING_STATUSES),
       },
     });
     const byDate = new Map<string, { start: number; end: number }[]>();
+    const push = (d: string, r: { start: number; end: number }) => {
+      const ranges = byDate.get(d) ?? [];
+      ranges.push(r);
+      byDate.set(d, ranges);
+    };
     for (const inq of inquiries) {
       const start = parseTimeToMinutes(inq.time);
       const hours = parseDurationHours(inq.duration);
       if (start == null || hours <= 0) continue;
-      const ranges = byDate.get(inq.date) ?? [];
-      ranges.push({ start, end: start + hours * 60 });
-      byDate.set(inq.date, ranges);
+      const end = start + hours * 60;
+      push(inq.date, { start, end: Math.min(end, DAY_END_MIN) });
+      if (end > DAY_END_MIN) {
+        push(shiftDateStr(inq.date, 1), { start: 0, end: end - DAY_END_MIN });
+      }
     }
     const dates: Record<string, 'full' | 'partial'> = {};
     for (const [date, ranges] of byDate) {
+      if (date < from || date > to) continue; // queryFrom was only for spillover context
       dates[date] = hasFreeWindow(ranges, DAY_START_MIN, DAY_END_MIN, 60)
         ? 'partial'
         : 'full';
@@ -198,19 +212,39 @@ export class InquiriesService {
     const start = parseTimeToMinutes(time);
     const hours = parseDurationHours(duration);
     if (start == null || hours <= 0) return;
-    const end = start + hours * 60;
+    const end = start + hours * 60; // minutes from `date`'s midnight; may exceed 1440
+
+    // The booking can run past midnight into later days, and an existing
+    // booking on the day before `date` can already spill into it — widen the
+    // query to that full span (plus a day of padding on each side) and
+    // compare everything on one shared timeline instead of just same-date.
+    const lastDayOffset = Math.floor((end - 1) / 1440);
+    const fromDate = shiftDateStr(date, -1);
+    const toDate = shiftDateStr(date, lastDayOffset + 1);
 
     const existing = await this.repo.find({
-      where: { roomId, date, status: In(AVAILABILITY_BLOCKING_STATUSES) },
+      where: {
+        roomId,
+        date: Between(fromDate, toDate),
+        status: In(AVAILABILITY_BLOCKING_STATUSES),
+      },
     });
     for (const inq of existing) {
-      const exStart = parseTimeToMinutes(inq.time);
+      const exStart0 = parseTimeToMinutes(inq.time);
       const exHours = parseDurationHours(inq.duration);
-      if (exStart == null || exHours <= 0) continue;
+      if (exStart0 == null || exHours <= 0) continue;
+      const offsetDays = daysBetweenDateStrs(date, inq.date);
+      const exStart = exStart0 + offsetDays * 1440;
+      const exEndUnwrapped = exStart0 + exHours * 60;
       const exEnd = exStart + exHours * 60;
       if (start < exEnd && exStart < end) {
+        const endDayOffset = Math.floor((exEndUnwrapped - 1) / 1440);
+        const exEndLabel =
+          endDayOffset > 0
+            ? `${minutesToTime(exEndUnwrapped - endDayOffset * 1440)} on ${shiftDateStr(inq.date, endDayOffset)}`
+            : minutesToTime(exEndUnwrapped);
         throw new BadRequestException(
-          `This room is already booked on ${date} from ${inq.time} to ${minutesToTime(exEnd)}. Please choose a different time.`,
+          `This room is already booked on ${inq.date} from ${inq.time} to ${exEndLabel}. Please choose a different time.`,
         );
       }
     }

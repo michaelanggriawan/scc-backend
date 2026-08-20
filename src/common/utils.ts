@@ -94,3 +94,20 @@ export function formatDueDate(dueDate: string | Date | null | undefined): string
 export function toDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
+
+// Adds/subtracts whole days from a "YYYY-MM-DD" date string, done in UTC so
+// it can't be thrown off by DST — used to look at the day before/after a
+// booking when checking for one that runs past midnight into it.
+export function shiftDateStr(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Whole days between two "YYYY-MM-DD" strings (b - a), e.g. -1 if b is the
+// day before a.
+export function daysBetweenDateStrs(a: string, b: string): number {
+  const da = new Date(`${a}T00:00:00Z`).getTime();
+  const db = new Date(`${b}T00:00:00Z`).getTime();
+  return Math.round((db - da) / 86400000);
+}
