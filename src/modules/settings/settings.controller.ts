@@ -2,6 +2,7 @@ import { Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import {
+  GalleryInfoDto,
   NotificationPrefsDto,
   PaymentInfoDto,
   VenueInfoDto,
@@ -46,6 +47,16 @@ export class AdminSettingsController {
   saveNotifs(@Body() dto: NotificationPrefsDto) {
     return this.settings.saveNotificationPrefs(dto);
   }
+
+  @Get('gallery')
+  getGallery() {
+    return this.settings.getGalleryInfo();
+  }
+
+  @Put('gallery')
+  saveGallery(@Body() dto: GalleryInfoDto) {
+    return this.settings.saveGalleryInfo(dto);
+  }
 }
 
 @ApiTags('Settings (Public)')
@@ -58,5 +69,12 @@ export class PublicSettingsController {
   @Get('venue-info')
   venueInfo() {
     return this.settings.getVenueInfo();
+  }
+
+  // "Inside the Hall" gallery on the landing page.
+  @Public()
+  @Get('gallery')
+  gallery() {
+    return this.settings.getGalleryInfo();
   }
 }

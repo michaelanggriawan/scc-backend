@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  GalleryInfo,
   NotificationPrefs,
   PaymentInfo,
   Setting,
@@ -35,6 +36,10 @@ const DEFAULT_NOTIFS: NotificationPrefs = {
   paymentSubmitted: true,
   linkExpiringSoon: false,
   dailySummary: false,
+};
+
+const DEFAULT_GALLERY: GalleryInfo = {
+  photos: [],
 };
 
 @Injectable()
@@ -76,5 +81,12 @@ export class SettingsService {
   }
   saveNotificationPrefs(value: NotificationPrefs): Promise<NotificationPrefs> {
     return this.set(SETTING_KEYS.notifications, value);
+  }
+
+  getGalleryInfo(): Promise<GalleryInfo> {
+    return this.get(SETTING_KEYS.gallery, DEFAULT_GALLERY);
+  }
+  saveGalleryInfo(value: GalleryInfo): Promise<GalleryInfo> {
+    return this.set(SETTING_KEYS.gallery, value);
   }
 }

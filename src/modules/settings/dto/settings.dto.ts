@@ -39,3 +39,19 @@ export const NotificationPrefsSchema = z
 export class NotificationPrefsDto extends createZodDto(
   NotificationPrefsSchema,
 ) {}
+
+export const GalleryPhotoSchema = z
+  .object({
+    id: z.string(),
+    url: z.string(),
+    posX: z.number().min(0).max(100).default(50),
+    posY: z.number().min(0).max(100).default(50),
+  })
+  .strict();
+
+export const GalleryInfoSchema = z
+  .object({
+    photos: z.array(GalleryPhotoSchema).default([]),
+  })
+  .strict();
+export class GalleryInfoDto extends createZodDto(GalleryInfoSchema) {}

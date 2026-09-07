@@ -45,4 +45,12 @@ export class AdminUploadsController {
   qr(@UploadedFile() file: Express.Multer.File) {
     return this.uploads.save(file);
   }
+
+  @Post('gallery-photo')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(fileBody)
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  galleryPhoto(@UploadedFile() file: Express.Multer.File) {
+    return this.uploads.save(file);
+  }
 }

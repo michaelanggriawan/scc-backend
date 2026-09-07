@@ -4,6 +4,7 @@ import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 //   'venue'          -> VenueInfo
 //   'payment'        -> PaymentInfo (bank, account, QR)
 //   'notifications'  -> NotificationPrefs
+//   'gallery'        -> GalleryInfo ("Inside the Hall" landing page photos)
 // Keeps settings flexible without a migration per new field.
 @Entity('settings')
 export class Setting {
@@ -45,8 +46,23 @@ export interface NotificationPrefs {
   dailySummary: boolean;
 }
 
+// A single "Inside the Hall" gallery photo. posX/posY (0-100) are the
+// object-position offsets used to pan the image within its fixed-size
+// crop box on the landing page, without changing the box itself.
+export interface GalleryPhoto {
+  id: string;
+  url: string;
+  posX: number;
+  posY: number;
+}
+
+export interface GalleryInfo {
+  photos: GalleryPhoto[];
+}
+
 export const SETTING_KEYS = {
   venue: 'venue',
   payment: 'payment',
   notifications: 'notifications',
+  gallery: 'gallery',
 } as const;
